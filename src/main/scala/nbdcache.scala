@@ -33,7 +33,7 @@ abstract trait L1HellaCacheParameters extends L1CacheParameters {
   val nMSHRs = params(NMSHRs)
   val nIOMSHRs = params(NIOMSHRs)
   val mmioBase = params(MMIOBase)
-  val mmioBaseOff = log2Up(mmioBase)
+  val mmioBaseOff = log2Floor(mmioBase)
 }
 
 abstract class L1HellaCacheBundle extends Bundle with L1HellaCacheParameters
@@ -162,9 +162,10 @@ class IOMSHR(id: Int) extends L1HellaCacheModule {
   val beat_mask = (storegen.mask << Cat(beat_offset, UInt(0, wordOffBits)))
   val beat_data = Fill(beatWords, storegen.data)
 
+  val addr_byte = req.addr(beatOffBits - 1, 0)
   val a_type = Mux(isRead(req.cmd), Acquire.getType, Acquire.putType)
   val union = Mux(isRead(req.cmd),
-    Cat(MT_Q, M_XRD), beat_mask)
+    Cat(addr_byte, req.typ, M_XRD), beat_mask)
 
   val s_idle :: s_acquire :: s_grant :: s_resp :: Nil = Enum(Bits(), 4)
   val state = Reg(init = s_idle)
@@ -191,30 +192,26 @@ class IOMSHR(id: Int) extends L1HellaCacheModule {
   io.resp.bits.nack := Bool(false)
   io.resp.bits.replay := io.resp.valid
 
-  switch (state) {
-    is (s_idle) {
-      when (io.req.valid) {
-        req := io.req.bits
-      }
+  when (io.req.fire()) {
+    req := io.req.bits
+    state := s_acquire
+  }
+
+  when (io.acquire.fire()) {
+    state := s_grant
+  }
+
+  when (state === s_grant && io.grant.valid) {
+    when (isRead(req.cmd)) {
+      grant_word := wordFromBeat(req.addr, io.grant.bits.data)
+      state := s_resp
+    } .otherwise {
+      state := s_idle
     }
-    is (s_acquire) {
-      when (io.acquire.ready) {
-        state := s_grant
-      }
-    }
-    is (s_grant) {
-      when (io.grant.valid) {
-        when (isRead(req.cmd)) {
-          grant_word := wordFromBeat(req.addr, io.grant.bits.data)
-          state := s_resp
-        }
-      }
-    }
-    is (s_resp) {
-      when (io.resp.ready) {
-        state := s_idle
-      }
-    }
+  }
+
+  when (io.resp.fire()) {
+    state := s_idle
   }
 }
 
@@ -388,7 +385,8 @@ class MSHRFile extends L1HellaCacheModule {
   require(isPow2(mmioBase))
 
   // determine if the request is in the memory region or mmio region
-  val cacheable = io.req.bits.addr(paddrBits, mmioBaseOff) === UInt(0)
+  val baseAddr = io.req.bits.addr(coreMaxAddrBits - 1, mmioBaseOff)
+  val cacheable = baseAddr === UInt(0)
 
   val sdq_val = Reg(init=Bits(0, sdqDepth))
   val sdq_alloc_id = PriorityEncoder(~sdq_val(sdqDepth-1,0))
@@ -471,7 +469,7 @@ class MSHRFile extends L1HellaCacheModule {
     val mshr = Module(new IOMSHR(id))
 
     mmio_alloc_arb.io.in(i).valid := mshr.io.req.ready
-    mshr.io.req.valid := mmio_alloc_arb.io.in(i).valid
+    mshr.io.req.valid := mmio_alloc_arb.io.in(i).ready
     mshr.io.req.bits := io.req.bits
 
     mmio_rdy = mmio_rdy || mshr.io.req.ready
