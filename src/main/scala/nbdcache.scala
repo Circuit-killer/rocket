@@ -943,7 +943,11 @@ class HellaCache extends L1HellaCacheModule {
   mshrs.io.mem_grant.valid := narrow_grant.fire()
   mshrs.io.mem_grant.bits := narrow_grant.bits
   narrow_grant.ready := writeArb.io.in(1).ready || !narrow_grant.bits.hasData()
-  writeArb.io.in(1).valid := narrow_grant.valid && narrow_grant.bits.hasData()
+  /* The last clause here is necessary in order to prevent the responses for
+   * the IOMSHRs from being written into the data array. It works because the
+   * IOMSHR ids start right the ones for the regular MSHRs. */
+  writeArb.io.in(1).valid := narrow_grant.valid && narrow_grant.bits.hasData() &&
+                             narrow_grant.bits.client_xact_id < UInt(nMSHRs)
   writeArb.io.in(1).bits.addr := mshrs.io.refill.addr
   writeArb.io.in(1).bits.way_en := mshrs.io.refill.way_en
   writeArb.io.in(1).bits.wmask := ~UInt(0, nWays)
