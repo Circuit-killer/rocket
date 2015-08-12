@@ -33,7 +33,6 @@ abstract trait L1HellaCacheParameters extends L1CacheParameters {
   val nMSHRs = params(NMSHRs)
   val nIOMSHRs = params(NIOMSHRs)
   val mmioBase = params(MMIOBase)
-  val mmioBaseOff = log2Floor(mmioBase)
 }
 
 abstract class L1HellaCacheBundle extends Bundle with L1HellaCacheParameters
@@ -385,8 +384,7 @@ class MSHRFile extends L1HellaCacheModule {
   require(isPow2(mmioBase))
 
   // determine if the request is in the memory region or mmio region
-  val baseAddr = io.req.bits.addr(coreMaxAddrBits - 1, mmioBaseOff)
-  val cacheable = baseAddr === UInt(0)
+  val cacheable = io.req.bits.addr < UInt(mmioBase)
 
   val sdq_val = Reg(init=Bits(0, sdqDepth))
   val sdq_alloc_id = PriorityEncoder(~sdq_val(sdqDepth-1,0))
