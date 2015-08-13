@@ -479,6 +479,8 @@ class MSHRFile extends L1HellaCacheModule {
         io.mem_grant.bits.client_xact_id === UInt(id)
 
     resp_arb.io.in(i) <> mshr.io.resp
+
+    when (!mshr.io.req.ready) { io.fence_rdy := Bool(false) }
   }
 
   mmio_alloc_arb.io.out.ready := io.req.valid && !cacheable
