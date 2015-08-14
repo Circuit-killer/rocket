@@ -4,6 +4,7 @@ package rocket
 
 import Chisel._
 import uncore._
+import junctions.MMIOBase
 import Util._
 
 case object WordBits extends Field[Int]
@@ -12,7 +13,6 @@ case object ReplayQueueDepth extends Field[Int]
 case object NMSHRs extends Field[Int]
 case object NIOMSHRs extends Field[Int]
 case object LRSCCycles extends Field[Int]
-case object MMIOBase extends Field[Int]
 
 abstract trait L1HellaCacheParameters extends L1CacheParameters {
   val wordBits = params(WordBits)
